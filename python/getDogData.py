@@ -6,7 +6,8 @@ import requests
 from pymongo import mongo_client
 import os
 import matplotlib.pyplot as plt
-
+from gridfs import GridFS
+import io
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.relpath("./")))
 secret_file = os.path.join(BASE_DIR, '../secret.json')
@@ -69,9 +70,13 @@ print(breed_ratio)
 print(type(breed_ratio))
 
 plt.rcParams['font.family'] = 'NanumBarunGothic'
-# 이미지 파일이 저장될 디렉토리의 경로
-IMAGE_DIR = './image/'
+
 def create_pie_chart(region):
+
+    db = client["projectjh"]
+    fs = GridFS(db)
+
+
     breed_ratio = get_breed_ratio(region)
 
     breeds = list(breed_ratio.keys())
@@ -79,18 +84,22 @@ def create_pie_chart(region):
     ratios = [float(value.replace('%', '')) for value in breed_ratio.values()]
     colors = ['#c6dbda', '#fee1e8', '#fed7c3', '#f6eac2', '#ecd5e3']
 
-
     #파이 차트 생성
     plt.figure(figsize=(8, 10))
     plt.pie(ratios, labels=breeds,colors=colors, autopct='%1.1f%%')
     plt.title(f'{region} 친구들 ')
 
-    filename = f'breed_ratio_{region}.png'
-    filepath = os.path.join(IMAGE_DIR, filename)  # 전체 파일 경로 생성
-    plt.savefig(filepath, dpi=400, bbox_inches='tight')
-    print(filename + ' Saved...')
-    plt.show()
+    # 이미지를 파일로 저장하는 대신에 이미지를 메모리에 저장하고, 바이트 형태로 변환
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format='png', dpi=400, bbox_inches='tight')
+    img_buffer.seek(0)
 
-    # 저장된 이미지 파일의 경로 반환
-    return filepath
+    # 이미지를 GridFS에 저장하고 해당 파일의 ObjectId를 반환
+    with img_buffer as file:
+        file_id = fs.put(file, filename=f'breed_ratio_{region}.png')
 
+    print(f'Image for {region} saved with ObjectId: {file_id}')
+    plt.close()
+
+    # 저장된 이미지 파일의 ObjectId 반환
+    return str(file_id)

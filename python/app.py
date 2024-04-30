@@ -6,18 +6,24 @@ import time
 from typing import List
 from geopy.distance import geodesic
 import json
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 import os
 import pydantic
 from pymongo import mongo_client
 from bson.objectid import ObjectId
 from pydantic import BaseModel
+from gridfs import GridFS
+from starlette.responses import FileResponse
+import base64
+import mysql.connector
 from getNearPark import nearpark, geocode
 from getDogData import  get_breed_ratio, create_pie_chart
+
 
 pydantic.json.ENCODERS_BY_TYPE[ObjectId] = str
 
 app = FastAPI()
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.relpath("./")))
 secret_file = os.path.join(BASE_DIR, '../secret.json')
 
@@ -38,21 +44,7 @@ USERNAME = get_secret("Local_Mongo_Username")
 PASSWORD = get_secret("Local_Mongo_Password")
 
 client = mongo_client.MongoClient(f'mongodb://{USERNAME}:{PASSWORD}@{HOSTNAME}:27017/')
-
-
-
-@app.get('/')
-async def healthcheck():
-    return "OK"
-
-@app.get('/getmongo')
-async def getMongo(type:str):
-    # MongoDB에 연결
-    db = client["projectjh"]
-    collection = db[type]
-    data = list(collection.find({}, {"_id":0}).limit(10))
-    print(data)
-    return data
+db = client["projectjh"]
 
 # 주소 -> 좌표(위도,경도) 전환 API 활용
 api_key = 'AIzaSyCP29VXXIjK2E7rfNK4rO5JURBAh50mrqA'
@@ -87,10 +79,6 @@ def get_parkRanking(api_key, query):
         time.sleep(2)  # API 요구사항에 따라 토큰 간 2초 대기
 
     return parks_data
-def save_to_json(data, filename):
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
 
 # Pydantic 모델을 사용하여 응답 데이터 형식 정의
 class ParkData(BaseModel):
@@ -115,9 +103,6 @@ def savetomongodb(data,collection_name):
     except Exception as e:
         # 그 외의 예외가 발생하면 서버 오류로 간주합니다.
         raise HTTPException(status_code=500, detail=str(e))
-
-
-
 
 @app.get('/parks')
 async def get_all_parks(location: str):
@@ -156,19 +141,44 @@ async def get_all_parks(location: str):
     # MongoDB에 데이터 저장하고 결과 반환
     return savetomongodb(unique_addresses,type)
 
+# @app.get('/nearparks')
+# async def getNearParks(location: str):
+#     nearest_parks = nearpark(location)
+#     type = "nearpark"
+
+#     output_data = []
+#     for i, park_data in enumerate(nearest_parks, 1):
+#         park_name = park_data["park"]
+#         distance = park_data["distance"]
+#         # print(f"{i}. {park_name}: {distance:.2f} km")
+#         output_data.append({"park": park_name, "distance": round(distance, 2)})
+#     return output_data
+
+
 @app.get('/nearparks')
-async def getNearParks(location: str):
-    nearest_parks = nearpark(location)
-    type = "nearpark"
+async def get_near_parks(location: str):
+    try:
+        # 클라이언트에서 받은 위치 정보를 이용하여 데이터 조회
+        nearest_parks = nearpark(location)
+        type = "nearpark"
 
-    output_data = []
-    for i, park_data in enumerate(nearest_parks, 1):
-        park_name = park_data["park"]
-        distance = park_data["distance"]
-        # print(f"{i}. {park_name}: {distance:.2f} km")
-        output_data.append({"park": park_name, "distance": round(distance, 2)})
-    return savetomongodb(output_data,type)
+        output_data = []
+        for i, park_data in enumerate(nearest_parks, 1):
+            park_name = park_data["park"]
+            distance = park_data["distance"]
+            output_data.append({"park": park_name, "distance": round(distance, 2)})
+        
+        # 조회한 데이터를 MySQL에 삽입
+        if insert_data_to_mysql(output_data):
+            return {"message": "Data inserted successfully"}
+        else:
+            print(output_data)
+            return {"error": "Failed to insert data into MySQL"}
 
+    except Exception as e:
+        print("Error processing request:", e)
+        return {"error": "Internal server error"}
+    
 key = get_secret("apikey_dog")
 @app.get("/dogdata")
 async def get_dog_data(start:int, end:int, region:str):
@@ -194,11 +204,6 @@ async def get_dog_data(start:int, end:int, region:str):
 
     return row_data
 
-# @app.get("/dogbreed")
-# async def get_dogbreeds(sgg:str):
-#     result = get_breed()
-#     max = get_max_breed_ratio()
-#     return (result, max)
 @app.get("/getratio")
 async def get_ratio(region:str):
     type ="ratio"
@@ -207,13 +212,63 @@ async def get_ratio(region:str):
     
     
     return savetomongodb(breed_list, type)
-1
+
 @app.get("/createchart")
 async def get_chart(region:str):
-    db = client["projectjh"]
-    collection = db["image_paths"]
+    
+    fs = GridFS(db)
     # 이미지 파일 생성 및 경로 가져오기
-    image_path = create_pie_chart(region)
-    collection.insert_one({"image_path":image_path})
+    image_id = create_pie_chart(region)
 
-    return {"code": 200, "data": {"image_path": image_path}}
+    # GridFS에서 이미지를 가져옴
+    image = fs.get(ObjectId(image_id))
+    if image:
+    # 이미지 파일을 클라이언트에 전송
+        return Response(content=image.read(), media_type='image/jpeg')
+    else:
+        raise HTTPException(status_code=404, detail="이미지를 찾을 수 없습니다.")
+
+MYSQL_CONFIG = {
+    'host': get_secret("Mysql_Hostname"),
+    'user': get_secret("Mysql_Username"),
+    'password': get_secret("Mysql_Password"),
+    'database': get_secret("Mysql_DBname"),
+    'port': int(get_secret("Mysql_Port"))  # 포트 번호는 정수형으로 변환하여 설정
+}
+# MySQL 연결 함수
+def connect_to_mysql():
+    try:
+        conn = mysql.connector.connect(**MYSQL_CONFIG)
+        print("MySQL 연결 성공:", conn)  # 연결 객체 출력
+        return conn
+    except Exception as e:
+        print("MySQL 연결 실패:", e)  # 연결 실패 시 에러 메시지 출력
+        return None
+# 요청 본문을 받을 모델 정의
+class SearchRequest(BaseModel):
+    location: str
+# MySQL에 데이터 삽입하는 함수
+def insert_data_to_mysql(data):
+    try:
+        conn = connect_to_mysql()
+        if conn:
+            cursor = conn.cursor()
+
+            for park_data in data:
+                park_name = park_data["park"]
+                distance = park_data["distance"]
+                # 쿼리 실행
+                query = "INSERT INTO parks (park_name, distance) VALUES (%s, %s)"
+                values = (park_name, distance)
+                cursor.execute(query, values)
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        else:
+            print("MySQL 연결 실패로 데이터 삽입 실패")
+            return False
+    except Exception as e:
+        print("Error inserting data into MySQL:", e)
+        return False
