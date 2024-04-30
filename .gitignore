@@ -37,7 +37,10 @@ python/**/imsi*
 python/**/somefolder*
 python/**/json*
 python/**/project01*
+python/**/node_modules
 
+## mysql 
+mysql/**/node_modules
 
 ## oracle
 oracle/node/dbConfig.js
