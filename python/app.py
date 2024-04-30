@@ -120,7 +120,8 @@ def savetomongodb(data,collection_name):
 
 
 @app.get('/parks')
-async def get_all_parks(location: str, type:str):
+async def get_all_parks(location: str):
+    type = "park"
     # MongoDB에 연결
     # 서울시 각 구의 동들을 딕셔너리로 정의, 나중에 데이터 많아지면 파일로 저장하든가 말든가ㅣ...ㅎ ㅎ
     areas_by_location = {
@@ -166,7 +167,7 @@ async def getNearParks(location: str):
         distance = park_data["distance"]
         # print(f"{i}. {park_name}: {distance:.2f} km")
         output_data.append({"park": park_name, "distance": round(distance, 2)})
-    return output_data
+    return savetomongodb(output_data,type)
 
 key = get_secret("apikey_dog")
 @app.get("/dogdata")
@@ -199,7 +200,8 @@ async def get_dog_data(start:int, end:int, region:str):
 #     max = get_max_breed_ratio()
 #     return (result, max)
 @app.get("/getratio")
-async def get_ratio(region:str, type:str):
+async def get_ratio(region:str):
+    type ="ratio"
     breed_ratio = get_breed_ratio(region)
     breed_list = [{"breed": breed, "ratio": ratio} for breed, ratio in breed_ratio.items()]
     
