@@ -36,11 +36,12 @@ python/secret.json
 python/**/imsi*
 python/**/somefolder*
 python/**/json*
-python/**/project01*
+python/**/package-lock.json
 python/**/node_modules
 
 ## mysql 
 mysql/**/node_modules
+mysql/**/package-lock.json
 
 ## oracle
 oracle/node/dbConfig.js
