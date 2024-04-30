@@ -5,12 +5,21 @@
     <title>HOME</title>
     <style>
 
+
         /* 컨테이너의 스타일 */
         .container {
             display: flex; /* 컨테이너를 플렉스 박스로 설정 */
-            justify-content: center; /* 가로 방향으로 중앙 정렬 */
-            align-items: flex-end; /* 세로 방향으로 아래 정렬 */
-            height: 5vh; /* 화면 높이의 1/3로 설정 */
+            height: 5vh; /* 화면 높이의 100%로 설정 */
+            justify-content: center; /* 세로 방향으로 중앙 정렬 */
+        }
+        /* 링크의 스타일 */
+        .links-container a {
+            color: rgb(36, 32, 32); /* 링크의 색상 */
+            text-decoration: none; /* 링크의 밑줄 제거 */
+            font-size: 20px; /* 링크의 글꼴 크기 */
+            margin-right: 100px; /* 각 링크 간격 조정 */
+            font-weight: bold; /* 링크 텍스트 굵게 */
+            text-align: center; 
         }
 
         /* 타이틀의 스타일 */
@@ -33,8 +42,7 @@
 
         /* 링크에 마우스를 올렸을 때의 스타일 */
         a:hover {
-            color: rgb(255, 255, 255); /* 마우스를 올린 링크의 색상 변경 */
-            background-color: rgba(188, 186, 186, 0.444);
+            color: rgba(141, 126, 145, 0.896);
         }
         /* 이미지를 가운데로 정렬하는 스타일 */
         .centered-image {
@@ -46,27 +54,35 @@
         img {
             width: 400px; /* 이미지의 너비를 200px로 설정 */
             height: auto; /* 이미지의 높이를 자동으로 조정하여 비율 유지 */
+            cursor: pointer;
         }
+
+
     </style>
 </head>
 <body>
     <h1>HOME</h1>
 
     <div class="container">
-        <!-- 첫 번째 링크 -->
-        <a href="index.html">HOME</a>
-        <!-- 두 번째 링크 -->
-        <a href="test_near.html">거리순</a>
-        <!-- 세 번째 링크 -->
-        <a href="review.html">리뷰순</a>
-        <!-- 네 번째 링크 -->
-        <a href="ratio.html">FRIENDS</a>
+        <div class="links-container">
+            <!-- 첫 번째 링크 -->
+            <a href="index.html">HOME</a>
+            <!-- 두 번째 링크 -->
+            <a href="test_near.html">거리순</a>
+            <!-- 세 번째 링크 -->
+            <a href="http://192.168.1.80:8500/parkRatings.html">리뷰순</a>
+            <!-- 네 번째 링크 -->
+            <a href="ratio.html">FRIENDS</a>
+        </div>
     </div>
     <!-- 이미지를 가운데로 정렬할 div -->
     <div class="centered-image">
         <!-- 이미지 삽입 -->
-        <img src="image.png" alt="Image Description">
+        <img src="image1.png" alt="Image Description">
+    
     </div>
+
+
 
 
 </body>
