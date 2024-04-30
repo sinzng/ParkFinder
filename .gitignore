@@ -1,0 +1,47 @@
+## .env
+.env
+
+.vscode
+
+## c
+c/*
+c/*.o
+c/**/*
+!c/**/
+!c/**/*.c
+!c/**/lib/
+!c/**/lib/*.h
+!c/**/Makefile
+!c/**/Makefile.*
+
+## java
+**/*.class
+
+##scala
+scala/**/project
+scala/**/target
+
+## maven
+maven/**/target
+
+## nodejs
+node/**/node_modules
+node/**/package-lock.json
+node/conf/*
+
+## python venv 
+python/**/.venv
+python/**/__pycache__/
+python/secret.json
+python/**/imsi*
+python/**/somefolder*
+python/**/json*
+python/**/project01*
+
+
+## oracle
+oracle/node/dbConfig.js
+oracle/node/node_modules
+oracle/node/package-lock.json
+oracle/**/myterror.csv
+
