@@ -79,6 +79,22 @@ def get_parkRanking(api_key, query):
         time.sleep(2)  # API 요구사항에 따라 토큰 간 2초 대기
 
     return parks_data
+def get_address_from_location(location):
+    # 이전에 입력받은 주소가 아닌 경우 구글 Maps API 호출
+    url = 'https://maps.googleapis.com/maps/api/geocode/json'
+    params = {
+        'address': location,
+        'key': get_secret('google_apiKey'),  # 자신의 Google Geocoding API 키로 대체
+        'region': 'KR'  # 한국 기준으로 주소 검색
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    
+    if 'results' in data and data['results']:
+        formatted_address = data['results'][0]['formatted_address']
+        return formatted_address
+    else:
+        return None
 
 # Pydantic 모델을 사용하여 응답 데이터 형식 정의
 class ParkData(BaseModel):
@@ -140,45 +156,8 @@ async def get_all_parks(location: str):
 
     # MongoDB에 데이터 저장하고 결과 반환
     return savetomongodb(unique_addresses,type)
-
-# @app.get('/nearparks')
-# async def getNearParks(location: str):
-#     nearest_parks = nearpark(location)
-#     type = "nearpark"
-
-#     output_data = []
-#     for i, park_data in enumerate(nearest_parks, 1):
-#         park_name = park_data["park"]
-#         distance = park_data["distance"]
-#         # print(f"{i}. {park_name}: {distance:.2f} km")
-#         output_data.append({"park": park_name, "distance": round(distance, 2)})
-#     return output_data
-
-
-@app.get('/nearparks')
-async def get_near_parks(location: str):
-    try:
-        # 클라이언트에서 받은 위치 정보를 이용하여 데이터 조회
-        nearest_parks = nearpark(location)
-        type = "nearpark"
-
-        output_data = []
-        for i, park_data in enumerate(nearest_parks, 1):
-            park_name = park_data["park"]
-            distance = park_data["distance"]
-            output_data.append({"park": park_name, "distance": round(distance, 2)})
-        
-        # 조회한 데이터를 MySQL에 삽입
-        if insert_data_to_mysql(output_data):
-            return {"message": "Data inserted successfully"}
-        else:
-            print(output_data)
-            return {"error": "Failed to insert data into MySQL"}
-
-    except Exception as e:
-        print("Error processing request:", e)
-        return {"error": "Internal server error"}
     
+
 key = get_secret("apikey_dog")
 @app.get("/dogdata")
 async def get_dog_data(start:int, end:int, region:str):
@@ -244,23 +223,131 @@ def connect_to_mysql():
     except Exception as e:
         print("MySQL 연결 실패:", e)  # 연결 실패 시 에러 메시지 출력
         return None
-# 요청 본문을 받을 모델 정의
-class SearchRequest(BaseModel):
-    location: str
-# MySQL에 데이터 삽입하는 함수
-def insert_data_to_mysql(data):
+
+@app.get('/nearparks')
+async def get_address(location: str):
+        # 이전에 입력받았던 주소인지 확인
+    region_info = await get_region_from_mysql(location)
+    nearby_parks = []  # 근처 공원을 저장할 변수 초기화
+    
+    if region_info:
+        # 이전에 입력받았던 주소인 경우
+        formatted_address = region_info['address']
+        latitude = region_info['latitude']
+        longitude = region_info['longitude']
+        # 이미 검색된 주소이므로 해당 region_id로부터 공원 리스트를 가져옴
+        nearby_parks = await get_nearparks_by_region(region_info['id'])
+    else:
+        # 이전에 입력받은 주소가 아닌 경우 구글 Maps API 호출
+        url = 'https://maps.googleapis.com/maps/api/geocode/json'
+        params = {
+            'address': location,
+            'key': get_secret('google_apiKey'),  # 자신의 Google Geocoding API 키로 대체
+            'region': 'KR'  # 한국 기준으로 주소 검색
+        }
+        
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        if data['status'] == 'OK':
+            # 정상적으로 결과가 반환되었을 때
+            location = data['results'][0]['geometry']['location']
+            formatted_address = data['results'][0]['formatted_address']
+            latitude = location['lat']
+            longitude = location['lng']
+            
+            # MySQL에 주소 삽입
+            await insert_address_to_mysql(formatted_address, latitude, longitude)
+            
+            # 근처 공원 찾기
+            nearby_parks = await getNearParks(formatted_address)
+            
+            # MySQL parks 테이블에 근처 공원 리스트 저장
+            for park_data in nearby_parks:
+                park_name = park_data["park"]
+                distance = park_data["distance"]
+                await insert_park_to_mysql(park_name, distance, formatted_address)
+            
+        else:
+            # 결과가 없거나 오류가 발생했을 때
+            return {'error': 'No results found or error occurred.'}
+    
+    return {
+        'address': formatted_address,
+        'latitude': latitude,
+        'longitude': longitude,
+        'nearby_parks': nearby_parks
+    }
+async def get_region_from_mysql(location:str):
+    try : 
+        conn = connect_to_mysql()
+        if conn : 
+            cursor = conn.cursor() 
+
+            query = "SELECT * FROM region WHERE address = %s"
+            cursor.execute(query,(get_address_from_location(location),))
+            region_info = cursor.fetchone()
+            cursor.close()
+            
+            if region_info :
+                # 이미 주소가 존재하는 경우 cnt 값을 1 증가시킴
+                cursor = conn.cursor()
+                update_query = "UPDATE region SET cnt = cnt + 1 WHERE address = %s"
+                cursor.execute(update_query, (get_address_from_location(location),))
+                conn.commit()
+                cursor.close()
+                
+                return{
+                    'id': region_info[0],  # 여기서 'id' 키 추가
+                    'address':region_info[1], 
+                    'latitude':region_info[2], 
+                    'longitude':region_info[3] 
+                }
+            else :
+                # 주소가 존재하지 않는 경우 새로 추가
+                cursor = conn.cursor()
+                insert_query = "INSERT INTO region (address, latitude, longitude) VALUES (%s, %s, %s)"
+                cursor.execute(insert_query, (location, 0, 0))  # 예시로 latitude와 longitude를 0으로 초기화
+                conn.commit()
+                cursor.close()
+                
+                return None 
+        else :
+            print("MySQL 연결 실패")
+            return None
+    except Exception as e:
+        print("Error retrieving data from MySQL:", e)
+        return None
+async def get_nearparks_by_region(region_id: int):
+    try:
+        conn = connect_to_mysql()
+        if conn:
+            cursor = conn.cursor()
+            # 주어진 region_id로부터 공원 리스트를 가져옴
+            query = "SELECT park_name, distance FROM parks WHERE region_id = %s"
+            cursor.execute(query, (region_id,))
+            park_data = cursor.fetchall()
+            parks = [{"park": row[0], "distance": row[1]} for row in park_data]
+            cursor.close()
+            conn.close()
+            return parks
+        else:
+            print("MySQL 연결 실패")
+            return []
+    except Exception as e:
+        print("Error retrieving parks from MySQL:", e)
+        return []
+    
+async def insert_address_to_mysql(address, latitude, longitude):
     try:
         conn = connect_to_mysql()
         if conn:
             cursor = conn.cursor()
 
-            for park_data in data:
-                park_name = park_data["park"]
-                distance = park_data["distance"]
-                # 쿼리 실행
-                query = "INSERT INTO parks (park_name, distance) VALUES (%s, %s)"
-                values = (park_name, distance)
-                cursor.execute(query, values)
+            # 쿼리 실행
+            query = "INSERT INTO region (address, latitude, longitude) VALUES (%s, %s, %s)"
+            values = (address, latitude, longitude)
+            cursor.execute(query, values)
 
             conn.commit()
             cursor.close()
@@ -272,3 +359,42 @@ def insert_data_to_mysql(data):
     except Exception as e:
         print("Error inserting data into MySQL:", e)
         return False
+    
+async def getNearParks(location: str):
+    nearest_parks = nearpark(location)
+    type = "nearpark"
+
+    output_data = []
+    for i, park_data in enumerate(nearest_parks, 1):
+        park_name = park_data["park"]
+        distance = park_data["distance"]
+        # print(f"{i}. {park_name}: {distance:.2f} km")
+        output_data.append({"park": park_name, "distance": round(distance, 2)})
+    return output_data
+
+async def insert_park_to_mysql(park_name, distance, address):
+    try:
+        conn = connect_to_mysql()
+        if conn:
+            cursor = conn.cursor()
+
+            # 주소에 해당하는 region_id 가져오기
+            query = "SELECT id FROM region WHERE address = %s"
+            cursor.execute(query, (get_address_from_location(address),))
+            region_id = cursor.fetchone()[0]
+
+            # 쿼리 실행
+            query = "INSERT INTO parks (park_name, distance, region_id) VALUES (%s, %s, %s)"
+            values = (park_name, distance, region_id)
+            cursor.execute(query, values)
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        else:
+            print("MySQL 연결 실패로 데이터 삽입 실패")
+            return False
+    except Exception as e:
+        print("Error inserting data into MySQL:", e)
+        return False 

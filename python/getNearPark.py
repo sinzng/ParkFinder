@@ -75,10 +75,8 @@ def nearpark(address, limit=5) :
     nearest_parks = []
     for i, (park, distance) in enumerate(park_distances[:limit], 1):
         nearest_parks.append({"park": park, "distance": distance})
-    # print(nearest_parks)
-    # print(type(nearest_parks))
+
     return nearest_parks
 
 # 함수를 사용하여 가장 가까운 공원 10개 찾기
 nearest_parks = nearpark('언주로 98길 35-12')
-
