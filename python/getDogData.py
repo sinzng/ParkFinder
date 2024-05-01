@@ -97,9 +97,6 @@ def create_pie_chart(region):
     # 이미지를 GridFS에 저장하고 해당 파일의 ObjectId를 반환
     with img_buffer as file:
         file_id = fs.put(file, filename=f'breed_ratio_{region}.png')
-
-    print(f'Image for {region} saved with ObjectId: {file_id}')
-    plt.close()
-
+    print(file_id)
     # 저장된 이미지 파일의 ObjectId 반환
     return str(file_id)

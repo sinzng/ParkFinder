@@ -46,39 +46,8 @@ PASSWORD = get_secret("Local_Mongo_Password")
 client = mongo_client.MongoClient(f'mongodb://{USERNAME}:{PASSWORD}@{HOSTNAME}:27017/')
 db = client["projectjh"]
 
-# 주소 -> 좌표(위도,경도) 전환 API 활용
-api_key = 'AIzaSyCP29VXXIjK2E7rfNK4rO5JURBAh50mrqA'
-maps = googlemaps.Client(key=api_key)
-def get_parkRanking(api_key, query):
-    parks_data = []
-    next_page_token = None
 
-    while True:
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        params = {
-            'query': query,
-            'key': api_key,
-            'language': 'ko',
-            'pagetoken': next_page_token  # 첫 요청에서는 None이므로 파라미터가 무시됨
-        }
 
-        response = requests.get(url, params=params)
-        results = response.json()
-
-        for place in results['results']:
-            parks_data.append({
-                'name': place.get('name'),
-                'address': place.get('formatted_address'),
-                'lat': place.get('geometry')['location']['lat'],
-                'lng': place.get('geometry')['location']['lng']
-            })
-
-        next_page_token = results.get('next_page_token')
-        if not next_page_token or 'error_message' in results:
-            break
-        time.sleep(2)  # API 요구사항에 따라 토큰 간 2초 대기
-
-    return parks_data
 def get_address_from_location(location):
     # 이전에 입력받은 주소가 아닌 경우 구글 Maps API 호출
     url = 'https://maps.googleapis.com/maps/api/geocode/json'
@@ -95,6 +64,63 @@ def get_address_from_location(location):
         return formatted_address
     else:
         return None
+    
+def get_location_from_addr(addr):
+    # 이전에 입력받은 주소가 아닌 경우 구글 Maps API 호출
+    url = 'https://maps.googleapis.com/maps/api/geocode/json'
+    params = {
+        'address': addr,
+        'key': get_secret('google_apiKey'),  # 자신의 Google Geocoding API 키로 대체
+        'region': 'KR'  # 한국 기준으로 주소 검색
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    
+    if 'results' in data and data['results']:
+        latitude = data['results'][0]['geometry']['location']['lat']
+        longitude = data['results'][0]['geometry']['location']['lng']
+        return latitude, longitude
+    else:
+        return None
+    
+# 주소 -> 좌표(위도,경도) 전환 API 활용
+api_key = get_secret('google_apiKey')
+maps = googlemaps.Client(key=api_key)
+def get_parkRanking(location):
+    parks_data = []
+    next_page_token = None
+    addr =maps.geocode(location)
+    lat = addr[0]['geometry']['location']['lat']
+    lng = addr[0]['geometry']['location']['lng']
+    while True:
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            'location': f'{lat},{lng}',
+            'radius': 2000, 
+            'key': api_key,
+            'keyword': '공원',
+            'type':'park',
+            'language':'ko',
+            'pagetoken': next_page_token  # 첫 요청에서는 None이므로 파라미터가 무시됨
+        }
+
+        response = requests.get(url, params=params)
+        results = response.json()
+
+        for place in results['results']:
+            parks_data.append({
+                'name': place.get('name'),
+                'address': place.get('vicinity'),
+                'lat': place.get('geometry')['location']['lat'],
+                'lng': place.get('geometry')['location']['lng']
+            })
+
+        next_page_token = results.get('next_page_token')
+        if not next_page_token or 'error_message' in results:
+            break
+        time.sleep(2)  # API 요구사항에 따라 토큰 간 2초 대기
+
+    return parks_data
 
 # Pydantic 모델을 사용하여 응답 데이터 형식 정의
 class ParkData(BaseModel):
@@ -136,8 +162,8 @@ async def get_all_parks(location: str):
 
     # 입력한 지역과 함수 내의 지역을 합쳐서 쿼리를 구성하여 공원 정보를 가져옴
     for area in areas:
-        query = f'공원 in {location} {area}'
-        park_info = get_parkRanking(api_key, query)
+        query = f'{location}+{area}'
+        park_info = get_parkRanking(query)
 
         # 리스트로 변환하여 추가
         park_list = []
@@ -150,11 +176,13 @@ async def get_all_parks(location: str):
             })
         all_parks.extend(park_list)
 
-    # 주소를 추출하여 중복 제거
-    unique_addresses = list({park["address"]: park for park in all_parks}.values())
+    # 중복 주소 제거
+    unique_parks = {}
+    for park in all_parks:
+        unique_parks[park["address"]] = park
 
     # MongoDB에 데이터 저장하고 결과 반환
-    return savetomongodb(unique_addresses,type)
+    return savetomongodb(list(unique_parks.values()), type)
     
 
 key = get_secret("apikey_dog")
@@ -191,6 +219,7 @@ async def get_ratio(region:str):
     
     return savetomongodb(breed_list, type)
 
+
 @app.get("/createchart")
 async def get_chart(region:str):
     
@@ -203,9 +232,13 @@ async def get_chart(region:str):
     if image:
     # 이미지 파일을 클라이언트에 전송
         return Response(content=image.read(), media_type='image/jpeg')
+
     else:
         raise HTTPException(status_code=404, detail="이미지를 찾을 수 없습니다.")
-
+    
+    
+print(get_chart("용산구"))
+    
 MYSQL_CONFIG = {
     'host': get_secret("Mysql_Hostname"),
     'user': get_secret("Mysql_Username"),
