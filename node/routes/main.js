@@ -73,6 +73,5 @@ app.get('/getratio', async (req, res ) => {
     };
 });
 // get create chart
-axios
 
 module.exports = app;
