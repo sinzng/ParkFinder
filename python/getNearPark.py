@@ -53,7 +53,7 @@ def geocode(address):
         return location['lat'], location['lng']
     else:
         return None
-def nearpark(address, limit=5) :
+def nearpark(address, limit=20) :
 
     # 사용자의 좌표 (예: 서울의 위도와 경도)
     user_address = address
@@ -80,3 +80,4 @@ def nearpark(address, limit=5) :
 
 # 함수를 사용하여 가장 가까운 공원 10개 찾기
 nearest_parks = nearpark('언주로 98길 35-12')
+print(nearest_parks)

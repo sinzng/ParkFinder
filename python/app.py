@@ -123,7 +123,6 @@ def savetomongodb(data,collection_name):
 @app.get('/parks')
 async def get_all_parks(location: str):
     type = "park"
-    # MongoDB에 연결
     # 서울시 각 구의 동들을 딕셔너리로 정의, 나중에 데이터 많아지면 파일로 저장하든가 말든가ㅣ...ㅎ ㅎ
     areas_by_location = {
         "강남구": ["신사동", "논현동", "압구정동", "청담동", "삼성동", "대치동", "역삼동",
@@ -362,7 +361,6 @@ async def insert_address_to_mysql(address, latitude, longitude):
     
 async def getNearParks(location: str):
     nearest_parks = nearpark(location)
-    type = "nearpark"
 
     output_data = []
     for i, park_data in enumerate(nearest_parks, 1):
