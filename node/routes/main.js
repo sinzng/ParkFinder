@@ -72,27 +72,7 @@ app.get('/getratio', async (req, res ) => {
         }
     };
 });
-
-
 // get create chart
-app.get('/createchart', async (req, res ) => {
-    const region = req.query.region; // 클라이언트에서 보낸 위치 정보
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", `http://0.0.0.0:3000/createchart?region=${encodeURIComponent(region)}`);
-    xhr.setRequestHeader("content-type", "application/json");
-    xhr.send();
-
-    xhr.onload = () => {
-        if (xhr.status === 200) {
-            const imageUrl = xhr.responseText; // 이미지 파일의 URL
-            console.log(imageUrl);
-            res.json({imageUrl}); // 클라이언트로 데이터를 응답
-        } else {
-            console.error(xhr.status, xhr.statusText);
-            res.status(500).json({ error: 'Failed to fetch chart' });
-        }
-    };
-});
+axios
 
 module.exports = app;
